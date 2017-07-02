@@ -118,7 +118,7 @@ int main() {
           Eigen::MatrixXd transformed_waypoints = inverseTransform2D(px, py, psi, pts_x, pts_y);
 
           /*
-          * TODO: Calculate steeering angle and throttle using MPC.
+          * TODO: Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
