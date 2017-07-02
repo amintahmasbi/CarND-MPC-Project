@@ -42,6 +42,14 @@ double polyeval(Eigen::VectorXd coeffs, double x) {
   return result;
 }
 
+// Evaluate first derivation of polynomial.
+double polyPrimEval(Eigen::VectorXd coeffs, double x) {
+  double result = 0.0;
+  for (int i = 1; i < coeffs.size(); i++) {
+    result += i * coeffs[i] * pow(x, i - 1);
+  }
+  return result;
+}
 // Fit a polynomial.
 // Adapted from
 // https://github.com/JuliaMath/Polynomials.jl/blob/master/src/Polynomials.jl#L676-L716
@@ -66,6 +74,10 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
+
+// tranform from world system to vehicle system
+// inverse of affine matrix
+//source: http://planning.cs.uiuc.edu/node99.html
 Eigen::MatrixXd inverseTransform2D(double new_origin_x,double new_origin_y,double new_origin_psi, Eigen::VectorXd pts_x, Eigen::VectorXd pts_y)
 {
 
@@ -117,14 +129,28 @@ int main() {
 
           Eigen::MatrixXd transformed_waypoints = inverseTransform2D(px, py, psi, pts_x, pts_y);
 
+          int order_of_poly = 3;
+          //fit a polynomial to the above x and y coordinates
+          auto coeffs = polyfit(transformed_waypoints.row(0),transformed_waypoints.row(1),order_of_poly);
+
+          // calculate the cross track error
+          double cte = polyeval(coeffs, px) - py;
+          // TODO: calculate the orientation error
+          double epsi = psi - atan(polyPrimEval(coeffs, px));
+
+          Eigen::VectorXd state(6);
+          state << x, y, psi, v, cte, epsi;
+
+          auto vars = mpc.Solve(state, coeffs);
+
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
-          double steer_value = 0.0;
-          double throttle_value = 0.1;
+          double steer_value = 0.0;//vars[6]/deg2rad(25);
+          double throttle_value = 0.1;//vars[7];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
