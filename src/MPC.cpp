@@ -6,9 +6,9 @@
 
 using CppAD::AD;
 
-// TODO: Set the timestep length and duration
-size_t N = 10;
-double dt = 0.1;
+// Set the timestep length and duration
+size_t N = 10; // Tried Bigger values (15, 20, and 25) but MPC prediction goes beyond available waypoints
+double dt = 0.1; // Tried smaller value (0.05) but went unstable
 
 // This value assumes the model presented in the classroom is used.
 //

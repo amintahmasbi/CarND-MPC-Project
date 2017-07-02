@@ -135,6 +135,7 @@ int main() {
           Eigen::VectorXd pts_y = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());;
 
           //count for delay
+          // calculate the future state based on kinematic model
           double next_px = px + v * cos(psi) * delay/1000.0;
           double next_py = py + v * sin(psi) * delay/1000.0;
           double next_psi = psi + v / Lf * steering_angle * delay/1000.0;
@@ -167,7 +168,7 @@ int main() {
 //          auto vars = mpc.Solve(state, coeffs);//without delay
           auto vars = mpc.Solve(next_state, coeffs);
 
-
+          //Extract actuator and MPC points from result
           reverse(vars.begin(), vars.end());
           double N = vars.back();
           vars.pop_back();
