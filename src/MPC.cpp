@@ -8,7 +8,7 @@ using CppAD::AD;
 
 // Set the timestep length and duration
 size_t N = 10; // Tried Bigger values (15, 20, and 25) but MPC prediction goes beyond available waypoints
-double dt = 0.1; // Tried smaller value (0.05) but went unstable
+double dt = 0.2; // Tried smaller value (0.05) but went unstable
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -27,7 +27,7 @@ double ref_cte = 0;
 //Reference orientation error
 double ref_epsi = 0;
 //Reference velocity
-double ref_v = 40;
+double ref_v = 40 * 0.44704; // mph to meter/sec
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should establish
@@ -284,7 +284,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs)
   ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
   // Cost
-  auto cost = solution.obj_value;
+//  auto cost = solution.obj_value;
   //std::cout << "Cost " << cost << std::endl;
 
   // Return the first actuator values. The variables can be accessed with

@@ -102,14 +102,17 @@ int main() {
 
   // MPC is initialized here!
   MPC mpc;
+  auto current_time = std::chrono::system_clock::now();
+  auto prev_time = std::chrono::system_clock::now();
 
-  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+
+  h.onMessage([&mpc, &current_time, &prev_time](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-    cout << sdata << endl;
+    //cout << sdata << endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
@@ -124,10 +127,17 @@ int main() {
           double psi = j[1]["psi"];
           //double psi_unity = j[1]["psi_unity"];
           double v = j[1]["speed"];
+          v = v * 0.44704; // convert from mph to meter/sec
           double steering_angle = j[1]["steering_angle"];
+          steering_angle = -1*steering_angle; // invert steering to match kinematic model for psi
           double throttle = j[1]["throttle"];
 
-          int delay = 100; //in ms
+          //calculate delta_t between the last two data received from simulator
+          current_time = std::chrono::system_clock::now();
+          auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - prev_time);
+          int delay = (int)(diff.count()); //100; //in ms
+          prev_time = current_time;
+
           double Lf = 2.67;
 
           //Convert waypoint to Eigen Vectors
@@ -138,7 +148,11 @@ int main() {
           // calculate the future state based on kinematic model
           double next_px = px + v * cos(psi) * delay/1000.0;
           double next_py = py + v * sin(psi) * delay/1000.0;
-          double next_psi = psi + v / Lf * steering_angle * delay/1000.0;
+          double next_psi = 0;
+          for (int i = 0; i < delay; i+=5)
+          {
+            next_psi = psi + v / Lf * steering_angle * 5/1000.0;
+          }
           double next_v = v + throttle * delay/1000.0;
 
           Eigen::MatrixXd transformed_waypoints = inverseTransform2D(px, py, psi, pts_x, pts_y);//witout delay
@@ -249,7 +263,7 @@ int main() {
 
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
@@ -259,7 +273,7 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          this_thread::sleep_for(chrono::milliseconds(delay));
+          this_thread::sleep_for(chrono::milliseconds(100));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
