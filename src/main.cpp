@@ -6,6 +6,7 @@
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
+#include "Eigen-3.3/Eigen/LU"
 #include "MPC.h"
 #include "json.hpp"
 
@@ -65,6 +66,24 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
+Eigen::MatrixXd inverseTransform2D(double new_origin_x,double new_origin_y,double new_origin_psi, Eigen::VectorXd pts_x, Eigen::VectorXd pts_y)
+{
+
+  Eigen::MatrixXd affineTransform(3,3);
+  affineTransform << cos(new_origin_psi),-sin(new_origin_psi),new_origin_x,
+                     sin(new_origin_psi),cos(new_origin_psi),new_origin_y,
+                     0, 0, 1;
+  Eigen::MatrixXd pts(3,pts_x.size());
+  pts.row(0) = pts_x;
+  pts.row(1) = pts_y;
+  pts.row(2) = Eigen::VectorXd::Ones(pts_x.size());
+
+  Eigen::MatrixXd transformed_pts(3,pts_x.size());
+  transformed_pts = affineTransform.inverse()*pts;
+
+  return transformed_pts;
+}
+
 int main() {
   uWS::Hub h;
 
@@ -90,7 +109,13 @@ int main() {
           double px = j[1]["x"];
           double py = j[1]["y"];
           double psi = j[1]["psi"];
+          //double psi_unity = j[1]["psi_unity"];
           double v = j[1]["speed"];
+
+          Eigen::VectorXd pts_x = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
+          Eigen::VectorXd pts_y = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());;
+
+          Eigen::MatrixXd transformed_waypoints = inverseTransform2D(px, py, psi, pts_x, pts_y);
 
           /*
           * TODO: Calculate steeering angle and throttle using MPC.
@@ -98,8 +123,8 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          double steer_value = 0.0;
+          double throttle_value = 0.1;
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -124,6 +149,13 @@ int main() {
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
 
+
+          for (int i = 0; i < ptsx.size(); ++i)
+          {
+            next_x_vals.push_back(transformed_waypoints(0,i));
+            next_y_vals.push_back(transformed_waypoints(1,i));
+          }
+
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
@@ -139,7 +171,7 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          this_thread::sleep_for(chrono::milliseconds(100));
+          //this_thread::sleep_for(chrono::milliseconds(100));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
