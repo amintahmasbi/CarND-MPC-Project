@@ -149,6 +149,8 @@ int main() {
           double next_px = px + v * cos(psi) * delay/1000.0;
           double next_py = py + v * sin(psi) * delay/1000.0;
           double next_psi = 0;
+          //Divide the prediction into smaller time steps.
+          //That way the current steering angle would iteratively change the yaw angle.
           for (int i = 0; i < delay; i+=5)
           {
             next_psi = psi + v / Lf * steering_angle * 5/1000.0;
