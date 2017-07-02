@@ -134,34 +134,38 @@ int main() {
           Eigen::VectorXd pts_x = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
           Eigen::VectorXd pts_y = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());;
 
-          Eigen::MatrixXd transformed_waypoints = inverseTransform2D(px, py, psi, pts_x, pts_y);
+          //count for delay
+          double next_px = px + v * cos(psi) * delay/1000.0;
+          double next_py = py + v * sin(psi) * delay/1000.0;
+          double next_psi = psi + v / Lf * steering_angle * delay/1000.0;
+          double next_v = v + throttle * delay/1000.0;
+
+          Eigen::MatrixXd transformed_waypoints = inverseTransform2D(px, py, psi, pts_x, pts_y);//witout delay
 
           int order_of_poly = 3;
           //fit a polynomial to the above x and y coordinates
           auto coeffs = polyfit(transformed_waypoints.row(0),transformed_waypoints.row(1),order_of_poly);
 
+          // Transform the next point (after delay) to current position coordinate system
+          Eigen::MatrixXd transformed_next = inverseTransform2D(px, py, psi, Eigen::VectorXd::Constant(1,1,next_px), Eigen::VectorXd::Constant(1,1,next_py));
+          double next_transformed_px = transformed_next(0,0);
+          double next_transformed_py = transformed_next(1,0);
+          double next_transformed_psi = next_psi - psi;
+
           // Calculate the cross track error
-          double cte = polyeval(coeffs, 0);
+//          double cte = polyeval(coeffs, 0);// without delay
+          double cte = polyeval(coeffs, next_transformed_px) - next_transformed_py;
           // Calculate the orientation error
-          double epsi = -atan(coeffs[1]);//- atan(polyPrimEval(coeffs, 0));
+//          double epsi = -atan(coeffs[1]);//no delay
+          double epsi = next_transformed_psi - atan(polyPrimEval(coeffs, next_transformed_px));
 
-          Eigen::VectorXd state(6);
-          state << 0, 0, 0, v, cte, epsi;
+//          Eigen::VectorXd state(6);//without delay
+//          state << 0, 0, 0, v, cte, epsi;
+          Eigen::VectorXd next_state(6);
+          next_state << 0, 0, 0, next_v, cte, epsi;
 
-          Eigen::VectorXd actuators(2);
-          actuators << steering_angle, throttle;
-
-//          Eigen::VectorXd next_state(state.size());
-//          //count for delay
-//          next_state(0) = state(0) + state(3) * cos(state(2)) * delay;
-//          next_state(1) = state(1) + state(3) * sin(state(2)) * delay;
-//          next_state(2) = state(2) + state(3) / Lf * actuators(0) * delay;
-//          next_state(3) = state(3) + actuators(1) * delay;
-//          next_state(4) = polyeval(coeffs, next_state(0)) - next_state(1);
-//          next_state(5) = next_state(2) - atan(polyPrimEval(coeffs, next_state(0)));
-
-          auto vars = mpc.Solve(state, coeffs); // without delay
-//          auto vars = mpc.Solve(next_state, coeffs);
+//          auto vars = mpc.Solve(state, coeffs);//without delay
+          auto vars = mpc.Solve(next_state, coeffs);
 
 
           reverse(vars.begin(), vars.end());
@@ -254,7 +258,7 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-//          this_thread::sleep_for(chrono::milliseconds(delay));
+          this_thread::sleep_for(chrono::milliseconds(delay));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
