@@ -4,6 +4,7 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <algorithm>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "Eigen-3.3/Eigen/LU"
@@ -36,7 +37,7 @@ string hasData(string s) {
 // Evaluate a polynomial.
 double polyeval(Eigen::VectorXd coeffs, double x) {
   double result = 0.0;
-  for (int i = 0; i < coeffs.size(); i++) {
+  for (unsigned int i = 0; i < coeffs.size(); i++) {
     result += coeffs[i] * pow(x, i);
   }
   return result;
@@ -45,7 +46,7 @@ double polyeval(Eigen::VectorXd coeffs, double x) {
 // Evaluate first derivation of polynomial.
 double polyPrimEval(Eigen::VectorXd coeffs, double x) {
   double result = 0.0;
-  for (int i = 1; i < coeffs.size(); i++) {
+  for (unsigned int i = 1; i < coeffs.size(); i++) {
     result += i * coeffs[i] * pow(x, i - 1);
   }
   return result;
@@ -123,7 +124,13 @@ int main() {
           double psi = j[1]["psi"];
           //double psi_unity = j[1]["psi_unity"];
           double v = j[1]["speed"];
+          double steering_angle = j[1]["steering_angle"];
+          double throttle = j[1]["throttle"];
 
+          int delay = 100; //in ms
+          double Lf = 2.67;
+
+          //Convert waypoint to Eigen Vectors
           Eigen::VectorXd pts_x = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
           Eigen::VectorXd pts_y = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());;
 
@@ -133,24 +140,72 @@ int main() {
           //fit a polynomial to the above x and y coordinates
           auto coeffs = polyfit(transformed_waypoints.row(0),transformed_waypoints.row(1),order_of_poly);
 
-          // calculate the cross track error
-          double cte = polyeval(coeffs, px) - py;
-          // TODO: calculate the orientation error
-          double epsi = psi - atan(polyPrimEval(coeffs, px));
+          // Calculate the cross track error
+          double cte = polyeval(coeffs, 0);
+          // Calculate the orientation error
+          double epsi = -atan(coeffs[1]);//- atan(polyPrimEval(coeffs, 0));
 
           Eigen::VectorXd state(6);
-          state << x, y, psi, v, cte, epsi;
+          state << 0, 0, 0, v, cte, epsi;
 
-          auto vars = mpc.Solve(state, coeffs);
+          Eigen::VectorXd actuators(2);
+          actuators << steering_angle, throttle;
 
+//          Eigen::VectorXd next_state(state.size());
+//          //count for delay
+//          next_state(0) = state(0) + state(3) * cos(state(2)) * delay;
+//          next_state(1) = state(1) + state(3) * sin(state(2)) * delay;
+//          next_state(2) = state(2) + state(3) / Lf * actuators(0) * delay;
+//          next_state(3) = state(3) + actuators(1) * delay;
+//          next_state(4) = polyeval(coeffs, next_state(0)) - next_state(1);
+//          next_state(5) = next_state(2) - atan(polyPrimEval(coeffs, next_state(0)));
+
+          auto vars = mpc.Solve(state, coeffs); // without delay
+//          auto vars = mpc.Solve(next_state, coeffs);
+
+
+          reverse(vars.begin(), vars.end());
+          double N = vars.back();
+          vars.pop_back();
+          //double dt = vars.back();
+          vars.pop_back();
+          vector<double> deltas;
+
+          for (unsigned int t = 0; t < N - 1; t++)
+          {
+            deltas.push_back(vars.back());
+            vars.pop_back();
+          }
+          vector<double> accs;
+
+          for (unsigned int t = 0; t < N - 1; t++)
+          {
+            accs.push_back(vars.back());
+            vars.pop_back();
+          }
+
+          vector<double> xs;
+
+          for (unsigned int t = 0; t < N - 1; t++)
+          {
+            xs.push_back(vars.back());
+            vars.pop_back();
+          }
+          vector<double> ys;
+
+          for (unsigned int t = 0; t < N - 1; t++)
+          {
+            ys.push_back(vars.back());
+            vars.pop_back();
+          }
           /*
-          * TODO: Calculate steering angle and throttle using MPC.
+          * Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
-          double steer_value = 0.0;//vars[6]/deg2rad(25);
-          double throttle_value = 0.1;//vars[7];
+          double steer_value = -1*deltas[0]/(deg2rad(25)*Lf);
+          double throttle_value = accs[0];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -165,6 +220,9 @@ int main() {
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
 
+          mpc_x_vals = xs;
+          mpc_y_vals = ys;
+
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
 
@@ -175,8 +233,7 @@ int main() {
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
 
-
-          for (int i = 0; i < ptsx.size(); ++i)
+          for (unsigned int i = 0; i < ptsx.size(); ++i)
           {
             next_x_vals.push_back(transformed_waypoints(0,i));
             next_y_vals.push_back(transformed_waypoints(1,i));
@@ -197,7 +254,7 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          //this_thread::sleep_for(chrono::milliseconds(100));
+//          this_thread::sleep_for(chrono::milliseconds(delay));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
